@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Velocímetro · La Aventurina</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;600;700&family=Share+Tech+Mono&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:       #0a0c0f;
+    --panel:    #0f1318;
+    --border:   #1e2530;
+    --accent:   #00d4ff;
+    --warn:     #ff6b35;
+    --dim:      #3a4555;
+    --text:     #c8d8e8;
+    --white:    #eef4fa;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* Layout principal */
+  #app {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    height: 100vh;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  /* ── TOP BAR ── */
+  #topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--dim);
+  }
+  #topbar .label { letter-spacing: 0.12em; text-transform: uppercase; }
+  #gps-status { font-size: 11px; }
+  #gps-status.ok   { color: var(--accent); }
+  #gps-status.warn { color: var(--warn); }
+  #gps-status.err  { color: #ff3344; }
+
+  /* ── CENTRO: velocidad ── */
+  #center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+
+  #speed-wrap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Arco SVG decorativo */
+  #arc-svg {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  #speed-value {
+    font-size: clamp(96px, 22vw, 180px);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -2px;
+    color: var(--white);
+    text-shadow: 0 0 40px rgba(0,212,255,0.25);
+    font-family: 'Rajdhani', sans-serif;
+    transition: color 0.3s;
+    z-index: 1;
+  }
+  #speed-value.fast { color: var(--warn); text-shadow: 0 0 40px rgba(255,107,53,0.35); }
+
+  #speed-unit {
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-top: -6px;
+    z-index: 1;
+  }
+
+  /* ── BOTTOM GRID ── */
+  #bottom {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 8px;
+  }
+
+  /* Odómetro ocupa fila completa */
+  #odo-card {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 10px 16px;
+  }
+  #odo-card .odo-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  #odo-card .odo-sep {
+    width: 1px;
+    background: var(--border);
+    align-self: stretch;
+    margin: 4px 0;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-family: 'Share Tech Mono', monospace;
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--white);
+    line-height: 1;
+  }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value small {
+    font-size: 13px;
+    font-weight: 300;
+    color: var(--dim);
+  }
+
+  /* Brújula */
+  #compass-card { position: relative; }
+  #compass-ring {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    margin-bottom: 2px;
+  }
+  #compass-arrow {
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 22px solid var(--accent);
+    transform-origin: 50% 100%;
+    position: absolute;
+    bottom: 50%;
+    transition: transform 0.5s ease;
+  }
+  #compass-arrow::after {
+    content: '';
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 14px solid var(--dim);
+    position: absolute;
+    top: 22px;
+    left: -5px;
+  }
+  #compass-dir {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  /* Línea de escala (decorativa) */
+  #scale-bar {
+    grid-column: 1 / -1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: -4px 0 0;
+  }
+  #scale-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--warn));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    width: 0%;
+  }
+
+  /* Pantalla de error/permiso */
+  #overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,12,15,0.97);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    z-index: 100;
+    padding: 24px;
+    text-align: center;
+  }
+  #overlay.hidden { display: none; }
+  #overlay h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+  }
+  #overlay p {
+    font-size: 15px;
+    color: var(--text);
+    line-height: 1.5;
+    max-width: 300px;
+  }
+  #overlay button {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 6px;
+    padding: 12px 28px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-transform: uppercase;
+  }
+
+  /* Botón reset */
+  #btn-reset {
+    position: fixed;
+    bottom: 80px; right: 14px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--dim);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.1em;
+    cursor: pointer;
+    text-transform: uppercase;
+    z-index: 10;
+  }
+  #btn-reset:active { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Overlay de permisos -->
+<div id="overlay">
+  <h2>GPS · Velocímetro</h2>
+  <p>Necesita acceso a la ubicación para leer la velocidad GPS. Aceptá el permiso cuando el navegador lo solicite.</p>
+  <button onclick="startGPS()">Activar GPS</button>
+</div>
+
+<!-- App principal -->
+<div id="app">
+
+  <!-- Top bar -->
+  <div id="topbar">
+    <span class="label">La Aventurina</span>
+    <span id="gps-status" class="warn">◉ buscando señal…</span>
+    <span id="clock">--:--</span>
+  </div>
+
+  <!-- Velocidad central -->
+  <div id="center">
+    <div id="speed-wrap">
+      <!-- Arco SVG -->
+      <svg id="arc-svg" width="320" height="170" viewBox="0 0 320 170">
+        <path d="M 20 160 A 140 140 0 0 1 300 160"
+              fill="none" stroke="#1e2530" stroke-width="3" stroke-linecap="round"/>
+        <path id="arc-progress" d="M 20 160 A 140 140 0 0 1 300 160"
+              fill="none" stroke="url(#arcGrad)" stroke-width="3"
+              stroke-linecap="round"
+              stroke-dasharray="440" stroke-dashoffset="440"/>
+        <defs>
+          <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#00d4ff"/>
+            <stop offset="100%" stop-color="#ff6b35"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <div id="speed-value">0</div>
+      <div id="speed-unit">km / h</div>
+    </div>
+  </div>
+
+  <!-- Stats inferiores -->
+  <div id="bottom">
+
+    <!-- Odómetro de viaje (fila completa) -->
+    <div class="stat-card" id="odo-card">
+      <div class="odo-block">
+        <span class="stat-label">Trip</span>
+        <span class="stat-value accent" id="trip-odo">0.0 <small>km</small></span>
+      </div>
+      <div class="odo-sep"></div>
+      <div class="odo-block">
+        <span class="stat-label">Tiempo</span>
+        <span class="stat-value" id="trip-time">00:00 <small>h</small></span>
+      </div>
+      <div class="odo-sep"></div>
+      <div class="odo-block">
+        <span class="stat-label">Prom.</span>
+        <span class="stat-value" id="avg-speed">0 <small>km/h</small></span>
+      </div>
+    </div>
+
+    <!-- Máxima -->
+    <div class="stat-card">
+      <span class="stat-label">Máxima</span>
+      <span class="stat-value accent" id="max-speed">0 <small>km/h</small></span>
+    </div>
+
+    <!-- Brújula -->
+    <div class="stat-card" id="compass-card">
+      <span class="stat-label">Dirección</span>
+      <div id="compass-ring">
+        <div id="compass-arrow"></div>
+      </div>
+      <span id="compass-dir">--</span>
+    </div>
+
+    <!-- Altitud -->
+    <div class="stat-card" style="grid-column: 1 / -1;">
+      <span class="stat-label">Altitud</span>
+      <span class="stat-value" id="altitude">-- <small>m</small></span>
+    </div>
+
+  </div>
+</div>
+
+<button id="btn-reset" onclick="resetAll()">↺ Reset viaje</button>
+
+<script>
+  let maxSpeed = 0;
+  let watchId = null;
+  let tripDistance = 0;      // metros acumulados
+  let lastPos = null;        // última posición GPS
+  let tripStartTime = null;  // Date de inicio
+  let speedSamples = [];     // para promedio
+  let timerInterval = null;
+
+  // Reloj
+  function updateClock() {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2,'0');
+    const m = String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('clock').textContent = h + ':' + m;
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // Direcciones cardinales
+  const DIRS = ['N','NE','E','SE','S','SO','O','NO'];
+  function headingToDir(h) {
+    return DIRS[Math.round(h / 45) % 8];
+  }
+
+  // Arco de progreso (0–140 km/h = rango completo)
+  function updateArc(speed) {
+    const MAX_SPD = 140;
+    const ARC_LEN = 440;
+    const pct = Math.min(speed / MAX_SPD, 1);
+    const offset = ARC_LEN - (pct * ARC_LEN);
+    document.getElementById('arc-progress').style.strokeDashoffset = offset;
+  }
+
+  function startGPS() {
+    if (!navigator.geolocation) {
+      showError('Tu navegador no soporta geolocalización.');
+      return;
+    }
+    document.getElementById('overlay').classList.add('hidden');
+
+    watchId = navigator.geolocation.watchPosition(
+      onPosition,
+      onError,
+      { enableHighAccuracy: true, maximumAge: 500, timeout: 10000 }
+    );
+  }
+
+  // Distancia Haversine entre dos coords (metros)
+  function haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) *
+              Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function onPosition(pos) {
+    const { speed, heading, altitude, accuracy, latitude, longitude } = pos.coords;
+
+    // Velocidad
+    let kmh = 0;
+    if (speed !== null && speed >= 0) {
+      kmh = Math.round(speed * 3.6);
+    }
+
+    const speedEl = document.getElementById('speed-value');
+    speedEl.textContent = kmh;
+    speedEl.classList.toggle('fast', kmh > 100);
+    updateArc(kmh);
+
+    // Máxima
+    if (kmh > maxSpeed) {
+      maxSpeed = kmh;
+      document.getElementById('max-speed').innerHTML = maxSpeed + ' <small>km/h</small>';
+    }
+
+    // Odómetro: acumular distancia entre puntos (solo si hay movimiento >2 km/h)
+    if (lastPos && kmh > 2) {
+      const dist = haversine(lastPos.lat, lastPos.lon, latitude, longitude);
+      if (dist < 500) { // filtrar saltos GPS absurdos
+        tripDistance += dist;
+      }
+    }
+    lastPos = { lat: latitude, lon: longitude };
+
+    // Inicio de tiempo de viaje al primer movimiento
+    if (!tripStartTime && kmh > 2) {
+      tripStartTime = new Date();
+      timerInterval = setInterval(updateTripTime, 1000);
+    }
+
+    // Promedio de velocidad (solo muestras en movimiento)
+    if (kmh > 2) {
+      speedSamples.push(kmh);
+      if (speedSamples.length > 500) speedSamples.shift();
+    }
+
+    // Mostrar trip
+    const km = tripDistance / 1000;
+    document.getElementById('trip-odo').innerHTML =
+      km.toFixed(1) + ' <small>km</small>';
+
+    // Velocidad promedio
+    if (speedSamples.length > 0) {
+      const avg = Math.round(speedSamples.reduce((a,b) => a+b, 0) / speedSamples.length);
+      document.getElementById('avg-speed').innerHTML = avg + ' <small>km/h</small>';
+    }
+
+    // Brújula
+    if (heading !== null) {
+      document.getElementById('compass-arrow').style.transform =
+        `rotate(${heading}deg)`;
+      document.getElementById('compass-dir').textContent = headingToDir(heading);
+    }
+
+    // Altitud
+    if (altitude !== null) {
+      document.getElementById('altitude').innerHTML =
+        Math.round(altitude) + ' <small>m</small>';
+    }
+
+    // Estado GPS
+    const st = document.getElementById('gps-status');
+    if (accuracy < 20) {
+      st.textContent = '◉ GPS preciso';
+      st.className = 'ok';
+    } else {
+      st.textContent = '◉ GPS ~' + Math.round(accuracy) + 'm';
+      st.className = 'warn';
+    }
+  }
+
+  function updateTripTime() {
+    if (!tripStartTime) return;
+    const elapsed = Math.floor((new Date() - tripStartTime) / 1000);
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    const display = h > 0
+      ? String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0')
+      : String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    document.getElementById('trip-time').innerHTML = display + ' <small>h</small>';
+  }
+
+  function onError(err) {
+    const st = document.getElementById('gps-status');
+    st.textContent = '◉ sin GPS';
+    st.className = 'err';
+    if (err.code === 1) {
+      document.getElementById('overlay').classList.remove('hidden');
+      document.getElementById('overlay').innerHTML = `
+        <h2>Permiso denegado</h2>
+        <p>Habilitá el permiso de ubicación en el navegador para este sitio y recargá la página.</p>
+      `;
+    }
+  }
+
+  function showError(msg) {
+    document.getElementById('overlay').classList.remove('hidden');
+    document.getElementById('overlay').querySelector('p').textContent = msg;
+  }
+
+  function resetAll() {
+    maxSpeed = 0;
+    tripDistance = 0;
+    lastPos = null;
+    tripStartTime = null;
+    speedSamples = [];
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = null;
+    document.getElementById('max-speed').innerHTML = '0 <small>km/h</small>';
+    document.getElementById('trip-odo').innerHTML = '0.0 <small>km</small>';
+    document.getElementById('trip-time').innerHTML = '00:00 <small>h</small>';
+    document.getElementById('avg-speed').innerHTML = '0 <small>km/h</small>';
+  }
+</script>
+</body>
+</html>
